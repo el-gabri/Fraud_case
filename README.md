@@ -107,6 +107,34 @@ Regressao Logistica, Random Forest, Gradient Boosted Trees, XGBoost e
 LightGBM, avaliados com AUC-ROC, PR-AUC/average precision, recall a FPR
 fixo, precisao, recall, F1 e matriz de confusao.
 
+## Results (test set)
+
+Evaluated on the held-out test set (555,719 transactions, ~0.39% fraud
+rate) after the leakage fixes described above — never used to fit the
+feature pipeline or train any model:
+
+| Model | PR-AUC | ROC-AUC | Precision | Recall | F1 |
+|---|---|---|---|---|---|
+| **LightGBM** | **0.502** | 0.984 | 0.633 | 0.274 | 0.383 |
+| Logistic Regression | 0.303 | 0.967 | 0.084 | 0.851 | 0.153 |
+| Random Forest | 0.286 | 0.974 | 0.692 | 0.122 | 0.207 |
+| XGBoost | 0.228 | 0.958 | 0.256 | 0.181 | 0.212 |
+| Gradient Boosted Trees | 0.218 | 0.972 | 0.147 | 0.325 | 0.147 |
+
+**LightGBM** is the best model by PR-AUC — the metric that matters here,
+since with ~0.4% fraud prevalence ROC-AUC alone overstates quality for
+every model in the table.
+
+With the business-cost-optimized threshold (0.010, instead of a fixed
+0.5) — false-negative cost = transaction amount, false-positive cost =
+fixed manual-review cost from `config.yaml` — the estimated total cost on
+the test set drops from **$778,286** (at threshold 0.5) to **$210,643**,
+an estimated **$567,644 savings**.
+
+Full artifacts (confusion matrices, ROC/PR curves, per-model feature
+importance, `model_evaluation_results.csv`, `best_model_summary.txt`) are
+generated in `reports/` by `scripts/evaluate_models.py`.
+
 ## Licenca
 
 MIT.

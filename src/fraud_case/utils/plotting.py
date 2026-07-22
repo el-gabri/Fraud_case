@@ -9,6 +9,13 @@ from __future__ import annotations
 import logging
 import os
 
+import matplotlib
+
+# Backend nao-interativo: este modulo so salva figuras em arquivo (savefig),
+# nunca chama plt.show(). O backend interativo padrao (TkAgg) quebra quando
+# rodado sem um main loop de GUI (ex.: scripts em background/subprocess).
+matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns

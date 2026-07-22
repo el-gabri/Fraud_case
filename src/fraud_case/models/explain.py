@@ -22,6 +22,11 @@ def compute_shap_values(model, X_sample: pd.DataFrame):
 
 
 def save_summary_plot(shap_values, X_sample: pd.DataFrame, save_path: str | os.PathLike) -> None:
+    import matplotlib
+
+    # Backend nao-interativo (ver utils/plotting.py): so salvamos em
+    # arquivo, e o backend interativo padrao quebra sem um main loop de GUI.
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import shap
 

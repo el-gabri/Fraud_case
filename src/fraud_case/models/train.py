@@ -49,7 +49,6 @@ def train_logistic_regression(X_train, y_train, config: Config) -> LogisticRegre
         max_iter=params.get("max_iter", 1000),
         class_weight="balanced" if _use_class_weight(config) else None,
         random_state=config.seed,
-        n_jobs=-1,
     )
     model.fit(X_train, y_train)
     logger.info("Regressao Logistica treinada em %.2fs", time.time() - start)
