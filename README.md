@@ -1,41 +1,40 @@
-# Projeto de Detecção de Fraude em Transações de Cartão de Crédito
+# Deteccao de Fraude em Transacoes de Cartao de Credito
 
-## Descrição
+## Descricao
 
-Este projeto implementa um sistema de detecção de fraude em transações de cartão de crédito utilizando técnicas de machine learning. O sistema é capaz de identificar transações fraudulentas com alta precisão e recall, mesmo em um conjunto de dados altamente desbalanceado.
+Este projeto implementa um sistema de deteccao de fraude em transacoes de
+cartao de credito usando machine learning, com foco em metricas honestas
+(sem vazamento de dados) para um problema fortemente desbalanceado
+(~0.5% de fraude).
 
 ## Estrutura do Projeto
 
 ```
-fraud_detection_project/
-├── data/                  # Diretório para armazenar dados
-│   ├── raw/               # Dados brutos
-│   └── processed/         # Dados processados
-├── models/                # Modelos treinados e transformadores
-├── notebooks/             # Jupyter notebooks para análise
-├── reports/               # Relatórios, gráficos e resultados
-├── src/                   # Código fonte
-│   ├── data_preparation.py    # Preparação dos dados
-│   ├── feature_transformation.py  # Transformação de features
-│   ├── model_training.py     # Treinamento e avaliação de modelos
-│   └── utils.py              # Funções utilitárias
-├── config/                # Arquivos de configuração
-├── main.py                # Script principal
-└── README.md              # Este arquivo
+Fraud_case/
+├── config/
+│   └── config.yaml            # fonte unica: colunas, paths, hiperparametros, seed
+├── data/                       # fora do git (ver .gitignore)
+│   ├── raw/                    # fraudTrain.csv / fraudTest.csv
+│   └── processed/              # Parquet gerado por scripts/prepare_data.py
+├── models/                     # pipeline de features + modelos treinados (.joblib)
+├── notebooks/                  # analise exploratoria (nao usado em producao)
+├── reports/                    # metricas, graficos, resumo do melhor modelo
+├── src/fraud_case/
+│   ├── config.py               # carregamento tipado de config.yaml
+│   ├── data/                   # loader.py, balance.py
+│   ├── features/               # engineering.py (sem vazamento), pipeline.py (sklearn)
+│   ├── models/                 # train.py, evaluate.py, explain.py (SHAP)
+│   └── utils/                  # geo.py, datetime_features.py, io.py, plotting.py
+├── scripts/                    # CLIs finos: prepare_data.py, train_models.py, evaluate_models.py
+├── tests/                      # pytest (unitarios + smoke test com dados reais)
+├── main.py                     # orquestra os 3 scripts em sequencia
+├── pyproject.toml              # ruff + pytest
+└── requirements.txt
 ```
 
 ## Requisitos
 
-- Python 3.8+
-- pandas
-- numpy
-- scikit-learn
-- xgboost
-- matplotlib
-- seaborn
-- joblib
-
-Você pode instalar todas as dependências com:
+- Python 3.10+
 
 ```bash
 pip install -r requirements.txt
@@ -43,74 +42,71 @@ pip install -r requirements.txt
 
 ## Como Usar
 
-### 1. Preparação
+### 1. Preparacao
 
-Coloque os arquivos `fraudTrain.csv` e `fraudTest.csv` no diretório `data/raw/`.
+Coloque `fraudTrain.csv` e `fraudTest.csv` em `data/raw/` (nao versionados no git).
 
-### 2. Execução
-
-Execute o script principal para processar os dados, treinar e avaliar os modelos:
+### 2. Execucao
 
 ```bash
 python main.py
 ```
 
-Ou execute cada etapa separadamente:
+Ou cada etapa separadamente:
 
 ```bash
-# Preparação dos dados
-python src/data_preparation.py
-
-# Transformação de features
-python src/feature_transformation.py
-
-# Treinamento e avaliação de modelos
-python src/model_training.py
+python scripts/prepare_data.py      # feature engineering, sem vazamento, salva Parquet
+python scripts/train_models.py      # ajusta o pipeline de features + treina os modelos
+python scripts/evaluate_models.py   # avalia no teste, escolhe o melhor modelo por PR-AUC
 ```
 
-### 3. Notebooks
+Rodar os testes:
 
-Explore os notebooks no diretório `notebooks/` para análises detalhadas:
+```bash
+pytest
+```
 
-- `01_exploratory_analysis.ipynb`: Análise exploratória dos dados
-- `02_feature_engineering.ipynb`: Engenharia de features
-- `03_model_evaluation.ipynb`: Avaliação detalhada dos modelos
+### 3. Configuracao
 
-## Características Principais
+Todas as listas de colunas, hiperparametros de modelo, estrategia de
+desbalanceamento e custos de negocio (para o threshold otimo) vivem em
+`config/config.yaml` -- e a unica fonte de verdade, sem duplicacao entre
+modulos.
 
-### Preparação de Dados
+### 4. Notebooks
 
-- Tratamento de valores ausentes
-- Extração de componentes temporais (hora do dia, dia da semana, mês)
-- Cálculo da distância entre cliente e comerciante
-- Extração do primeiro e último dígito dos valores de transação
-- Cálculo de velocidade entre transações consecutivas
-- Detecção de desvios do padrão de gastos
-- Criação da coluna "Idade" a partir da data de nascimento
+Os notebooks em `notebooks/` sao material exploratorio (nao fazem parte do
+pipeline de producao em `src/fraud_case/`):
 
-### Transformação de Features
+- `01_exploratory_analysis.ipynb`
+- `02_feature_engineering.ipynb`
+- `03_model_evaluation.ipynb`
+- `04_hyperparameter_optimization_and_walk_forward.ipynb`
 
-- Normalização apenas das colunas especificadas:
-  - 'zip', 'lat', 'long', 'city_pop', 'unix_time', 'merch_lat', 'merch_long', 'distance_km', 'prev_lat', 'prev_long', 'prev_unix_time', 'time_diff_hours'
-  
-- One-hot encoding apenas para as colunas:
-  - 'gender', 'job', 'city'
+## Decisoes de modelagem
 
-### Modelagem
+- **Sem vazamento temporal**: toda feature agregada por cartao (media/
+  desvio-padrao de gasto, contagem de transacoes em 24h) usa apenas o
+  historico estritamente anterior a cada transacao (`shift(1)` +
+  `expanding`/`rolling(closed='left')`).
+- **Encoding**: `gender` via one-hot; `job`, `city`, `state`, `category`,
+  `merchant` via target encoding suavizado (fit somente no treino) --
+  `category` e `merchant` sao historicamente os preditores mais fortes
+  deste dataset e nao entravam no modelo na versao anterior.
+- **Desbalanceamento**: uma unica estrategia por vez, configuravel
+  (`class_weight` ou `undersample`), nunca as duas simultaneamente.
+- **Metrica principal**: PR-AUC / average precision (ROC-AUC infla a
+  percepcao de qualidade com prevalencia ~0.5%).
+- **Threshold**: otimizado por custo de negocio (custo de fraude nao
+  detectada = valor da transacao; custo de falso positivo = fricao de
+  analise manual), nao apenas 0.5 fixo.
 
-- Treinamento de quatro algoritmos:
-  - Regressão Logística
-  - Random Forest
-  - Gradient Boosted Trees
-  - XGBoost
-  
-- Avaliação com métricas apropriadas para dados desbalanceados:
-  - AUC-ROC
-  - Precisão
-  - Recall
-  - F1-Score
-  - Matriz de Confusão
+## Modelos
 
-## Licença
+Regressao Logistica, Random Forest, Gradient Boosted Trees, XGBoost e
+LightGBM, avaliados com AUC-ROC, PR-AUC/average precision, recall a FPR
+fixo, precisao, recall, F1 e matriz de confusao.
 
-Este projeto é licenciado sob a licença MIT - veja o arquivo LICENSE para detalhes.
+## Licenca
+
+MIT.

@@ -1,0 +1,118 @@
+# Config unica para o pipeline de deteccao de fraude.
+# Qualquer lista de colunas usada por mais de um modulo deve viver AQUI,
+# nunca duplicada em data_preparation/feature_pipeline/scripts.
+
+seed: 42
+
+paths:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  models_dir: models
+  reports_dir: reports
+  train_file: fraudTrain.csv
+  test_file: fraudTest.csv
+
+columns:
+  target: is_fraud
+
+  # Identificadores e colunas brutas que NUNCA entram no modelo
+  # (identificadores, PII, ou coordenadas absolutas que nao generalizam
+  # para cartoes/lojas fora do treino - ver plan.md secao 2.1).
+  id_columns:
+    - cc_num
+    - trans_num
+    - first
+    - last
+    - street
+    - dob
+    - trans_date_trans_time
+    - unix_time
+    - prev_unix_time
+    - zip
+    - lat
+    - long
+    - merch_lat
+    - merch_long
+    - prev_lat
+    - prev_long
+    - city_pop
+    - amt
+
+  # Categoricas de baixa cardinalidade -> one-hot encoding
+  categorical_low_cardinality:
+    - gender
+
+  # Categoricas de alta cardinalidade -> target encoding suavizado
+  # (fit apenas no treino; category/merchant sao historicamente os
+  # preditores mais fortes deste dataset - ver plan.md secao 4.1)
+  categorical_high_cardinality:
+    - job
+    - city
+    - state
+    - category
+    - merchant
+
+  # Numericas normalizadas (StandardScaler dentro do Pipeline)
+  numeric_to_scale:
+    - amt_log
+    - city_pop_log
+    - distance_km
+    - time_diff_hours
+    - transaction_velocity_kmh
+    - avg_amt_expanding
+    - stddev_amt_expanding
+    - amt_zscore_expanding
+    - idade
+    - txn_count_recent
+    - amt_sum_recent
+
+  # Numericas que ja estao em escala comparavel (flags, ciclicas, digitos)
+  numeric_passthrough:
+    - hour_sin
+    - hour_cos
+    - dow_sin
+    - dow_cos
+    - month
+    - first_digit
+    - last_digit
+    - impossible_velocity
+    - amt_is_outlier
+
+target_encoding:
+  smoothing: 20          # peso do prior global (m-estimate smoothing)
+  min_samples_leaf: 10   # categorias com menos amostras usam mais prior
+
+imbalance:
+  # Estrategia UNICA de correcao de desbalanceamento (ver plan.md 2.1 item 4).
+  # 'class_weight' usa todo o dataset + class_weight/scale_pos_weight.
+  # 'undersample' faz undersampling e exige calibracao de probabilidade depois.
+  strategy: class_weight
+  undersample_ratio: 10   # usado somente se strategy == 'undersample'
+
+velocity_windows:
+  # Janela usada em txn_count_recent/amt_sum_recent (ver features/engineering.py).
+  short_window: 24h
+
+models:
+  logistic_regression:
+    max_iter: 1000
+  random_forest:
+    n_estimators: 300
+    max_depth: null
+  gradient_boosting:
+    n_estimators: 200
+    learning_rate: 0.1
+    max_depth: 3
+  xgboost:
+    n_estimators: 400
+    learning_rate: 0.05
+    max_depth: 6
+  lightgbm:
+    n_estimators: 400
+    learning_rate: 0.05
+    num_leaves: 63
+
+evaluation:
+  # Custo de FN (fraude nao detectada) = valor da propria transacao (amt),
+  # usado diretamente por find_optimal_threshold_by_cost (models/evaluate.py).
+  cost_false_positive: 5.0   # custo fixo de fricção/análise manual por FP
